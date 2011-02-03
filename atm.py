@@ -2,6 +2,7 @@ __author__ = 'Tom'
 
 from Tkinter import *
 from PIL import Image, ImageTk
+import tkMessageBox
 
 class ATM:
     def __init__(self, root):
@@ -13,11 +14,15 @@ class ATM:
         number_panel = self.add_number_panel(frame)
         self.add_button_panel(number_panel)
         self.add_money()
+        self.has_withdraw = self.has_deposit = False
 
     def add_balance(self, frame):
         frame = Frame(frame, bd=1, relief=GROOVE) # add grooved frame for balance display
         frame.grid()
-        self.balance = 0.0
+        balance = open('balance.txt', 'rb')
+        num = balance.read()
+        self.balance = float(num) if num.strip() else 0.0
+        balance.close()
         self.tv_balance = StringVar()
         self.set_lbl_balance()
         self.has_balance = True
@@ -63,9 +68,11 @@ class ATM:
         lbl_50_dollars.photo = photo
         lbl_50_dollars.grid(row=1, column=0)
         # Add Entry widgets for withdrawn money
-        self.ent_20_dollars = Entry(frame, state=DISABLED)
+        self.tv_20_dollars = StringVar()
+        self.ent_20_dollars = Entry(frame, textvariable=self.tv_20_dollars, state=DISABLED)
         self.ent_20_dollars.grid(row=0, column=1)
-        self.ent_50_dollars = Entry(frame, state=DISABLED)
+        self.tv_50_dollars = StringVar()
+        self.ent_50_dollars = Entry(frame, textvariable=self.tv_50_dollars, state=DISABLED)
         self.ent_50_dollars.grid(row=1, column=1)
 
     def deposit(self):
@@ -83,28 +90,62 @@ class ATM:
         self.has_withdraw = True
 
     def done(self):
-        self.change_btn_state("active")
-        self.btn_done.configure(state=DISABLED)
-        self.has_balance = True
         if self.has_withdraw:
-            self.balance -= float(self.tv_balance.get())
+            amount = float(self.tv_balance.get())
+            if amount <= 0:
+                self.show_balance()
+            elif (amount < 20) or not ((amount % 2 == 0) and (amount % 5 == 0)):
+                tkMessageBox.showwarning("Withdraw", "I only have 20 and 50 dollar bills.")
+                self.tv_balance.set("0.00")
+            elif self.balance >= amount:
+                self.balance -= amount
+                self.save_balance()
+                # set dispensed money Entry widgets
+                num_50s = 0 # number of 50s
+                if amount % 5 == 0:
+                    num_50s = int(amount // 50)
+                    if (num_50s > 0) and ((amount - 50 * num_50s) % 20 != 0):
+                        num_50s -= 1
+                num_20s = int((amount - 50 * num_50s) // 20) # number of 20s
+                self.tv_20_dollars.set(str(num_20s))
+                self.tv_50_dollars.set(str(num_50s))
+            else:
+                tkMessageBox.showwarning("Withdraw", "Amount exceeds available balance.")
+                self.tv_balance.set("0.00")
         elif self.has_deposit:
             self.balance += float(self.tv_balance.get())
-        self.set_lbl_balance()
-        
+            self.save_balance()
+
+    def num_click_handler(self, num):
+        if self.has_withdraw or self.has_deposit:
+            amount = float(self.tv_balance.get())
+            if not self.has_balance:
+                num = round((amount * 10) + (round(num) / 100), 2)
+                self.tv_balance.set("%0.2f" % num)
+
     def change_btn_state(self, new_state):
         for btn in (self.btn_deposit, self.btn_balance, self.btn_withdraw):
             btn.configure(state=new_state)
         self.has_balance = False
+        # clear money Entry widgets
+        self.tv_20_dollars.set("")
+        self.tv_50_dollars.set("")
+
+    def show_balance(self):
+        self.change_btn_state("active")
+        self.btn_done.configure(state=DISABLED)
+        self.has_balance = True
+        self.set_lbl_balance()
+
+    def save_balance(self):
+        # save balance
+        balance = open('balance.txt', 'wb')
+        balance.write(str(self.balance))
+        balance.close()
+        self.show_balance()
 
     def set_lbl_balance(self):
         self.tv_balance.set("Balance is %0.2f" % self.balance)
-
-    def num_click_handler(self, num):
-        amount = float(self.tv_balance.get())
-        if not self.has_balance:
-            num = round((amount * 10) + (round(num) / 100), 2)
-            self.tv_balance.set("%0.2f" % num)
 
 root = Tk()
 atm = ATM(root)
